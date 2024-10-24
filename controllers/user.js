@@ -225,7 +225,7 @@ export const listUsers = async (req, res) => {
 // Método para actualizar los datos del usuario
 export const updateUser = async (req, res) => {
   try {
-    
+
     // Obtener la información del usuario a actualizar
     let userIdentity = req.user;  // el usuario autenticado en el token, lo trae desde el middleware auth.js
     let userToUpdate = req.body;  // recoge los datos nuevos del usuario desde el formulario
@@ -248,7 +248,7 @@ export const updateUser = async (req, res) => {
       return user && user._id.toString() !== userIdentity.userId;
     });
 
-    if(isDuplicateUser) {
+    if (isDuplicateUser) {
       return res.status(400).send({
         status: "error",
         message: "Error, solo se puede actualizar los datos del usuario logueado"
@@ -256,7 +256,7 @@ export const updateUser = async (req, res) => {
     }
 
     // Cifrar la contraseña en caso que la envíen en la petición
-    if(userToUpdate.password){
+    if (userToUpdate.password) {
       try {
         let pwd = await bcrypt.hash(userToUpdate.password, 10);
         userToUpdate.password = pwd;
@@ -271,9 +271,9 @@ export const updateUser = async (req, res) => {
     }
 
     // Buscar y actualizar el usuario en Mongo
-    let userUpdated = await User.findByIdAndUpdate(userIdentity.userId, userToUpdate, { new: true});
+    let userUpdated = await User.findByIdAndUpdate(userIdentity.userId, userToUpdate, { new: true });
 
-    if(!userUpdated){
+    if (!userUpdated) {
       return res.status(400).send({
         status: "error",
         message: "Error al actualizar el usuario"
@@ -293,5 +293,79 @@ export const updateUser = async (req, res) => {
       status: "error",
       message: "Error al actualizar los datos del usuario"
     });
+  }
+};
+
+// Método para subir AVATAR (imagen de perfil) y actualizamos el campo image del User
+export const uploadAvatar = async (req, res) => {
+  try {
+    // Verificar si se ha subido un archivo
+    if (!req.file) {
+      return res.status(400).send({
+        status: "error",
+        message: "Error la petición no incluye la imagen"
+      });
+    }
+
+    // Obtener la URL del archivo subido en Cloudinary
+    const avatarUrl = req.file.path;
+
+    // Guardar la imagen en la BD
+    const userUpdated = await User.findByIdAndUpdate(
+      req.user.userId,
+      { image: avatarUrl },
+      { new: true }
+    );
+
+    // Verificar si la actualización fue exitosa
+    if (!userUpdated) {
+      return res.status(500).send({
+        status: "error",
+        message: "Error al subir el archivo del avatar"
+      });
+    }
+
+    // Devolver respuesta exitosa
+    return res.status(200).json({
+      status: "success",
+      user: userUpdated,
+      file: avatarUrl
+    });
+
+  } catch (error) {
+    console.log("Error al subir el archivo del avatar", error);
+    return res.status(500).send({
+      status: "error",
+      message: "Error al subir el archivo del avatar"
+    });
+  }
+};
+
+// Método para mostrar el AVATAR (imagen de perfil)
+export const avatar = async (req, res) => {
+  try {
+    // Obtener el ID desde el parámetro del archivo 
+    const userId = req.params.id;
+
+    // Buscar el usuario en la base de datos para obtener la URL de Cloudinary
+    const user = await User.findById(userId).select('image');
+
+    // Verificar si el usuario existe y tiene una imagen
+    if(!user || !user.image){
+      return res.status(404).send({
+        status: "error",
+        message: "No existe usuario o imagen"
+      });
+    }
+
+    // Devolver la URL de la imagemn desde cloudinary
+    return res.redirect(user.image);
+
+  } catch (error) {
+  console.log("Error al mostrar el archivo del avatar", error);
+  return res.status(500).send({
+    status: "error",
+    message: "Error al mostrar el archivo del avatar"
+  });
   }
 };
