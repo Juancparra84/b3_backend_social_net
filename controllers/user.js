@@ -1,6 +1,9 @@
 import User from '../models/users.js';
 import bcrypt from 'bcrypt';
 import { createToken } from '../services/jwt.js';
+import Follow from '../models/follows.js';
+import Publication from '../models/publications.js';
+import { followThisUser, followUserIds } from '../services/followServices.js';
 
 // Método de prueba del controlador user
 export const testUser = (req, res) => {
@@ -146,7 +149,7 @@ export const profile = async (req, res) => {
     //Validar si el Id de usuario autenticado está disponible
     if (!req.user || !req.user.userId) {
       return res.status(401).send({
-        sattus: "sucess",
+        satus: "sucess",
         message: "Usuario no autenticado"
       });
     }
@@ -157,16 +160,19 @@ export const profile = async (req, res) => {
     //Verificar si el usuario buscado no existe
     if (!userProfile) {
       return res.status(404).send({
-        sattus: "sucess",
+        satus: "sucess",
         message: "Usuario no encontrado"
       });
     }
+   // Información de seguimiento: id del usuario identificado (req.user.userId) y el id del usuario del perfil que queremos consultar (userId = req.params.id)
+   const followInfo = await followThisUser(req.user.userId, userId);
 
-    //Devolver la información del perfil del usuario solicitado
-    return res.status(200).json({
-      status: "sucess",
-      user: userProfile
-    })
+   // Devolver la información del perfil del usuario solicitado
+   return res.status(200).json({
+     status: "success",
+     user: userProfile,
+     followInfo
+   });
 
   } catch (error) {
     console.log("error al obtener el perfil del usuario:", error);
@@ -197,12 +203,15 @@ export const listUsers = async (req, res) => {
     const users = await User.paginate({}, options);
 
     // Si no existen usuarios en la BD disponibles
-    if (!users || users.docs.length === 0) {
+    if(!users || users.docs.length === 0){
       return res.status(404).send({
         status: "error",
         message: "No existen usuarios disponibles"
       });
     }
+
+    // Listar los seguidores de un usuario, obtener el array de IDs de los usuarios que sigo
+    let followUsers = await followUserIds(req);
 
     // Devolver los usuarios paginados
     return res.status(200).json({
@@ -210,7 +219,9 @@ export const listUsers = async (req, res) => {
       users: users.docs,
       totalDocs: users.totalDocs,
       totalPages: users.totalPages,
-      CurrentPage: users.page
+      CurrentPage: users.page,
+      users_following: followUsers.following,
+      user_follow_me: followUsers.followers
     });
 
   } catch (error) {
@@ -344,7 +355,7 @@ export const uploadAvatar = async (req, res) => {
 // Método para mostrar el AVATAR (imagen de perfil)
 export const avatar = async (req, res) => {
   try {
-    // Obtener el ID desde el parámetro del archivo 
+    // Obtener el ID desde el parámetro del archivo
     const userId = req.params.id;
 
     // Buscar el usuario en la base de datos para obtener la URL de Cloudinary
@@ -369,3 +380,57 @@ export const avatar = async (req, res) => {
   });
   }
 };
+
+// Método para mostrar contador de seguidores y publicaciones
+export const counters = async (req, res) => {
+  try {
+    // Obtener el Id del usuario autenticado (token)
+    let userId = req.user.userId;
+
+
+    // Si llega el id a través de los parámetros en la URL tiene prioridad
+    if(req.params.id){
+      userId = req.params.id;
+    }
+
+    // Obtener el nombre y apellido del usuario
+    const user = await User.findById(userId, { name: 1, last_name: 1});
+
+
+
+    // Vericar el user
+    if(!user){
+      return res.status(404).send({
+        status: "error",
+        message: "Usuario no encontrado"
+      });
+    }
+
+    // Contador de usuarios que yo sigo (o que sigue el usuario autenticado)
+    const followingCount = await Follow.countDocuments({ "following_user": userId });
+
+    // Contador de usuarios que me siguen a mi (que siguen al usuario autenticado)
+    const followedCount = await Follow.countDocuments({ "followed_user": userId });
+
+    // Contador de publicaciones del usuario autenticado
+    const publicationsCount = await Publication.countDocuments({ "user_id": userId });
+
+    // Devolver los contadores
+    return res.status(200).json({
+      status: "success",
+      userId,
+      name: user.name,
+      last_name: user.last_name,
+      followingCount: followingCount,
+      followedCount: followedCount,
+      publicationsCount: publicationsCount
+    });
+
+  } catch (error) {
+    console.log("Error en los contadores", error)
+    return res.status(500).send({
+      status: "error",
+      message: "Error en los contadores"
+    });
+  }
+}
