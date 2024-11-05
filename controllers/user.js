@@ -433,4 +433,4 @@ export const counters = async (req, res) => {
       message: "Error en los contadores"
     });
   }
-}
+};
